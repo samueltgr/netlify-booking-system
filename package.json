@@ -1,0 +1,8 @@
+{
+  "name": "netlify-booking-system",
+  "version": "1.0.0",
+  "description": "Booking system frontend and functions",
+  "dependencies": {
+    "googleapis": "^108.0.0"
+  }
+}
