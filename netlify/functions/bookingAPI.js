@@ -1,68 +1,41 @@
-const { google } = require('googleapis');
+// This function is now a simple, secure forwarder.
 
-// These values are securely provided by Netlify's environment variables
-const SCRIPT_ID = process.env.GOOGLE_SCRIPT_ID;
-const GOOGLE_SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-// The key needs to have its newline characters properly formatted
-const GOOGLE_PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+const WEB_APP_URL = process.env.GOOGLE_WEB_APP_URL;
+const API_KEY = process.env.API_SECRET_KEY;
 
-// Authenticate our service
-const auth = new google.auth.JWT({
-  email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  key: GOOGLE_PRIVATE_KEY,
-  scopes: ['https://www.googleapis.com/auth/script.projects'],
-});
-
-const script = google.script({ version: 'v1', auth });
-
-// This is the main function that runs when our frontend calls it
 exports.handler = async (event, context) => {
+  // Set up headers for the request to Google
   const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    "Content-Type": "application/json",
+    "x-api-key": API_KEY, // Our secret password
   };
-  
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers };
-  }
 
-  const { action } = event.queryStringParameters;
-  let functionToCall;
-  let parameters;
-
-  if (action === 'getSlots') {
-    functionToCall = 'getAvailableSlots';
-    parameters = [event.queryStringParameters.date];
-  } else if (action === 'processBooking' && event.httpMethod === 'POST') {
-    functionToCall = 'processBooking';
-    parameters = [JSON.parse(event.body)];
-  } else {
-    return { statusCode: 400, body: 'Invalid action specified.', headers };
-  }
+  // The data we are sending to Google comes from the frontend
+  const body = event.body;
 
   try {
-    const response = await script.scripts.run({
-      scriptId: SCRIPT_ID,
-      requestBody: {
-        function: functionToCall,
-        parameters: parameters,
-        devMode: false,
-      },
+    const response = await fetch(WEB_APP_URL, {
+      method: "POST",
+      headers: headers,
+      body: body,
     });
 
-    if (response.data.error) {
-      const errorMessage = response.data.error.details[0].errorMessage;
-      return { statusCode: 409, body: JSON.stringify({ error: errorMessage }), headers };
+    if (!response.ok) {
+      throw new Error(`Google Script failed with status: ${response.statusText}`);
     }
 
+    const data = await response.json();
+
+    // Return the response from Google back to our frontend
     return {
       statusCode: 200,
-      body: JSON.stringify(response.data.response.result),
-      headers,
+      body: JSON.stringify(data),
     };
 
   } catch (error) {
-    return { statusCode: 500, body: JSON.stringify({ error: 'The server bridge failed.' }), headers };
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ success: false, error: error.message }),
+    };
   }
 };
